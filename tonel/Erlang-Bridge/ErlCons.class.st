@@ -1,6 +1,6 @@
 Class {
 	#name : #ErlCons,
-	#superclass : #Object,
+	#superclass : #SequenceableCollection,
 	#instVars : [
 		'head',
 		'tail'
@@ -27,6 +27,13 @@ ErlCons >> = o [
 	^ self class == o class and:
 	[ head = o head and:
 	[ tail = o tail ] ]
+]
+
+{ #category : #printing }
+ErlCons >> at: index [
+	self ifEmpty: [ self errorSubscriptBounds: index ].
+	index = 1 ifTrue: [ ^ head ].
+	^ tail at: index - 1
 ]
 
 { #category : #'as yet unclassified' }
