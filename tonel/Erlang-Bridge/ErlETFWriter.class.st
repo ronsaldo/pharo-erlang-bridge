@@ -87,6 +87,23 @@ ErlETFWriter >> encodeObject: anObject [
 ]
 
 { #category : #encoding }
+ErlETFWriter >> encodePID: pid [
+	self nextPut: PID_EXT;
+		encodeObject: pid node;
+		nextPutUInt32: pid id;
+		nextPutUInt32: pid serial;
+		nextPut: pid creation
+]
+
+{ #category : #encoding }
+ErlETFWriter >> encodePort: port [
+	self nextPut: PORT_EXT;
+		encodeObject: port node;
+		nextPutUInt32: port id;
+		nextPut: port creation
+]
+
+{ #category : #encoding }
 ErlETFWriter >> encodeString: aSymbol [
 	| value |
 	value := aSymbol utf8Encoded.

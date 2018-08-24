@@ -128,6 +128,11 @@ ErlETFParser >> nextUInt64 [
 ]
 
 { #category : #parsing }
+ErlETFParser >> nextUInt8 [
+	^ in next
+]
+
+{ #category : #parsing }
 ErlETFParser >> parse [
 	| version |
 	version := in next.
@@ -213,8 +218,47 @@ ErlETFParser >> parse_NEW_FUN_EXT [
 ]
 
 { #category : #parsing }
+ErlETFParser >> parse_NEW_REFERENCE_EXT [
+	| length |
+	length := self nextUInt16.
+	^ ErlReference new
+		node: self parseTerm;
+		creation: self nextUInt8;
+		id: ((1 to: length) collect: [:i | self nextUInt32]);
+		yourself
+]
+
+{ #category : #parsing }
 ErlETFParser >> parse_NIL_EXT [
 	^ ErlCons empty
+]
+
+{ #category : #parsing }
+ErlETFParser >> parse_PID_EXT [
+	^ ErlPID new
+		node: self parseTerm;
+		id: self nextUInt32;
+		serial: self nextUInt32;
+		creation: self nextUInt8;
+		yourself
+]
+
+{ #category : #parsing }
+ErlETFParser >> parse_PORT_EXT [
+	^ ErlPort new
+		node: self parseTerm;
+		id: self nextUInt32;
+		creation: self nextUInt8;
+		yourself
+]
+
+{ #category : #parsing }
+ErlETFParser >> parse_REFERENCE_EXT [
+	^ ErlReference new
+		node: self parseTerm;
+		id: self nextUInt32;
+		creation: self nextUInt8;
+		yourself
 ]
 
 { #category : #parsing }

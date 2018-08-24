@@ -1,3 +1,6 @@
+"
+I represent an Erlang linked list cons (ordered pair).
+"
 Class {
 	#name : #ErlCons,
 	#superclass : #SequenceableCollection,
@@ -29,11 +32,36 @@ ErlCons >> = o [
 	[ tail = o tail ] ]
 ]
 
-{ #category : #printing }
+{ #category : #accessing }
 ErlCons >> at: index [
 	self ifEmpty: [ self errorSubscriptBounds: index ].
 	index = 1 ifTrue: [ ^ head ].
 	^ tail at: index - 1
+]
+
+{ #category : #enumerating }
+ErlCons >> do: elementBlock [
+	| index position |
+	index := 1.
+	position := self.
+	[ position isEmpty ] whileFalse: [
+		elementBlock value: position head.
+		index := index + 1.
+		position := position tail
+	].
+]
+
+{ #category : #enumerating }
+ErlCons >> do: elementBlock separatedBy: separatorBlock [
+	| index position |
+	index := 1.
+	position := self.
+	[ position isEmpty ] whileFalse: [
+		index = 1 ifFalse: [separatorBlock value].
+		elementBlock value: position head.
+		index := index + 1.
+		position := position tail
+	].
 ]
 
 { #category : #'as yet unclassified' }
@@ -93,7 +121,7 @@ ErlCons >> printOn: aStream [
 	aStream nextPutAll: ' ]'
 ]
 
-{ #category : #printing }
+{ #category : #accessing }
 ErlCons >> size [
 	| size position |
 	self isEmpty ifTrue: [ ^ 0 ].
@@ -116,4 +144,16 @@ ErlCons >> tail [
 { #category : #accessing }
 ErlCons >> tail: anObject [
 	tail := anObject
+]
+
+{ #category : #enumerating }
+ErlCons >> withIndexDo: elementAndIndexBlock [
+	| index position |
+	index := 1.
+	position := self.
+	[ position isEmpty ] whileFalse: [
+		elementAndIndexBlock value: position head value: index.
+		index := index + 1.
+		position := position tail
+	].
 ]

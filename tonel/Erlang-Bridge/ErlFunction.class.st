@@ -1,3 +1,6 @@
+"
+I represent an encoded Erlang function.
+"
 Class {
 	#name : #ErlFunction,
 	#superclass : #Object,

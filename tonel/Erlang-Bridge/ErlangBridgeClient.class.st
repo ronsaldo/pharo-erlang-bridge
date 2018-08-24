@@ -84,6 +84,11 @@ ErlangBridgeClient >> evalValue: aString [
 	^ (self eval: aString) second
 ]
 
+{ #category : #evaluating }
+ErlangBridgeClient >> evalValue: aString bindings: bindings [
+	^ (self eval: aString bindings: bindings) second
+]
+
 { #category : #initialization }
 ErlangBridgeClient >> initialize [
 	super initialize.
@@ -151,6 +156,12 @@ ErlangBridgeClient >> receptionProcessIteration [
 
 	message := encodedMessage erlangETFDecoded.
 	self processReceivedMessage: message.
+]
+
+{ #category : #'system debugging' }
+ErlangBridgeClient >> registeredProcesses [
+	^ (self evalValue: 'registered().')
+		collect: [ :name | ErlProcess for: self named: name ] as: Array
 ]
 
 { #category : #'node communication' }
