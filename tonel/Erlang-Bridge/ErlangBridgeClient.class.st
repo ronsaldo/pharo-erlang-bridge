@@ -60,18 +60,33 @@ ErlangBridgeClient >> convertEvalResultError: erlangError [
 	erlangError second = #exception ifTrue: [
 		^ ErlangEvalExceptionError new
 			erlangError: erlangError;
-			exception: erlangError this;
-			signal
+			exception: erlangError third;
+			yourself
+	].
+
+	erlangError second = #parse ifTrue: [
+		^ ErlangEvalParseError new
+			erlangError: erlangError;
+			errorInfo: erlangError third;
+			yourself
+	].
+
+	erlangError second = #scan ifTrue: [
+		^ ErlangEvalScanError new
+			erlangError: erlangError;
+			errorInfo: erlangError third;
+			errorLocation: erlangError fourth;
+			yourself
 	].
 
 	^ ErlangEvalError new
 		erlangError: erlangError;
-		signal
+		yourself
 ]
 
 { #category : #evaluating }
 ErlangBridgeClient >> eval: aString [
-	^ self processEvalResult: (self eval: aString bindings: ErlCons empty)
+	^ self eval: aString bindings: ErlCons empty
 ]
 
 { #category : #evaluating }
@@ -81,12 +96,31 @@ ErlangBridgeClient >> eval: aString bindings: bindings [
 
 { #category : #evaluating }
 ErlangBridgeClient >> evalValue: aString [
-	^ (self eval: aString) second
+	^ self processEvalResultValue: (self eval: aString)
 ]
 
 { #category : #evaluating }
 ErlangBridgeClient >> evalValue: aString bindings: bindings [
-	^ (self eval: aString bindings: bindings) second
+	^ self processEvalResultValue: (self eval: aString bindings: bindings)
+]
+
+{ #category : #'gt-inspector-extension' }
+ErlangBridgeClient >> gtInspectorRegisteredProcessesIn: composite [
+	<gtInspectorPresentationOrder: 2> 
+	^ composite fastTable
+		title: 'Registered Processes';
+		display: [ self registeredProcesses ];
+		column: 'Process' evaluated: [ :value | GTObjectPrinter asTruncatedTextFrom: value name ]
+]
+
+{ #category : #'gt-inspector-extension' }
+ErlangBridgeClient >> gtInspectorWorkspace: composite [
+	<gtInspectorPresentationOrder: 0> 
+	^ composite erlangScript
+			title: 'Workspace';
+			client: [self];
+			display: [ :object | ''];
+			installDefaultSelectionActions
 ]
 
 { #category : #initialization }
@@ -112,6 +146,11 @@ ErlangBridgeClient >> newCallRequest [
 
 ]
 
+{ #category : #playground }
+ErlangBridgeClient >> playground [
+	^ GTErlangPlayground openForClient: self
+]
+
 { #category : #private }
 ErlangBridgeClient >> processCallSerial: callSerial response: callResponse [
 	| callState |
@@ -130,8 +169,13 @@ ErlangBridgeClient >> processEvalResult: evalResult [
 	self assert: evalResult isArray.
 	evalResultType := evalResult first.
 	evalResultType == #value ifTrue: [ ^ evalResult ].
-	evalResultType == #error ifTrue: [ ^ self convertEvalResultError: evalResult ].
+	evalResultType == #error ifTrue: [ ^ (self convertEvalResultError: evalResult) signal ].
 	self error: 'Unsupported eval result.'
+]
+
+{ #category : #evaluating }
+ErlangBridgeClient >> processEvalResultValue: evalResult [
+	^ (self processEvalResult: evalResult) second
 ]
 
 { #category : #private }

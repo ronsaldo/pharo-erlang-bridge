@@ -113,13 +113,13 @@ evalErlangCode(ErlangCode, Bindings) ->
 evalErlangCode_scan(ErlangCode, Bindings) ->
     case erl_scan:string(ErlangCode) of
         {ok, Tokens, _} -> evalErlangCode_parse(Tokens, Bindings);
-        Error -> Error
+        {error, ErrorInfo, ErrorLocation} -> {error, scan, ErrorInfo, ErrorLocation}
     end.
 
 evalErlangCode_parse(Tokens, Bindings) ->
     case erl_parse:parse_exprs(Tokens) of
         {ok, AST} -> evalErlangCode_eval(AST, Bindings);
-        Error -> Error
+        {error, ErrorInfo} -> {error, parse, ErrorInfo}
     end.
 
 evalErlangCode_eval(AST, Bindings) ->

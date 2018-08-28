@@ -1,9 +1,12 @@
+"
+I am a wrapper around an Erlang process.
+"
 Class {
 	#name : #ErlProcess,
-	#superclass : #Object,
+	#superclass : #ErlWrapperObject,
 	#instVars : [
-		'client',
-		'name'
+		'name',
+		'pid'
 	],
 	#category : #'Erlang-Bridge-Process'
 }
@@ -13,19 +16,14 @@ ErlProcess class >> for: aClient named: aProcessName [
 	^ self new client: aClient; name: aProcessName
 ]
 
-{ #category : #accessing }
-ErlProcess >> client [
-	^ client
-]
-
-{ #category : #accessing }
-ErlProcess >> client: anObject [
-	client := anObject
-]
-
 { #category : #evaluating }
 ErlProcess >> evalValue: anErlangCode [
 	^ client evalValue: anErlangCode bindings: { { #SelfProcess . name } } asErlangList
+]
+
+{ #category : #evaluating }
+ErlProcess >> evalValueWithPID: anErlangCode [
+	^ client evalValue: anErlangCode bindings: { { #SelfProcess . self pid } } asErlangList
 ]
 
 { #category : #accessing }
@@ -38,9 +36,25 @@ ErlProcess >> name: anObject [
 	name := anObject
 ]
 
+{ #category : #evaluating }
+ErlProcess >> pid [
+	^ pid ifNil: [
+		pid := name isErlPID ifTrue: [
+			name
+		] ifFalse: [
+			self evalValue: 'whereis(SelfProcess).'
+		]
+	]
+]
+
 { #category : #printing }
 ErlProcess >> printOn: aStream [
 	aStream nextPutAll: self class name; nextPutAll: ' named: '; print: name
+]
+
+{ #category : #evaluating }
+ErlProcess >> processInfo [
+	^ self evalValueWithPID: 'process_info(SelfProcess).'
 ]
 
 { #category : #evaluating }
@@ -51,4 +65,9 @@ ErlProcess >> state [
 { #category : #evaluating }
 ErlProcess >> status [
 	^ self evalValue: 'sys:get_status(SelfProcess).'
+]
+
+{ #category : #accessing }
+ErlProcess >> wrappedObject [
+	^ name
 ]

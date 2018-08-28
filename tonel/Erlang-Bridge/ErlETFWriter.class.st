@@ -82,6 +82,16 @@ ErlETFWriter >> encodeList: anErlangList [
 ]
 
 { #category : #encoding }
+ErlETFWriter >> encodeMap: aDictionary [
+	self nextPutUInt32: aDictionary size.
+	aDictionary keysAndValuesDo: [ :k :v |
+		self
+			encodeObject: k;
+			encodeObject: v
+	]
+]
+
+{ #category : #encoding }
 ErlETFWriter >> encodeObject: anObject [
 	anObject encodeErlangETFWith: self
 ]

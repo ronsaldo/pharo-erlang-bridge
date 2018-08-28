@@ -1,3 +1,6 @@
+"
+I am an Erlang evaluation error.
+"
 Class {
 	#name : #ErlangEvalError,
 	#superclass : #Error,
@@ -17,7 +20,39 @@ ErlangEvalError >> erlangError: anObject [
 	erlangError := anObject
 ]
 
+{ #category : #'as yet unclassified' }
+ErlangEvalError >> erlangErrorMessage [
+	^ erlangError printString
+]
+
+{ #category : #'as yet unclassified' }
+ErlangEvalError >> errorLocation [
+	^ 0
+]
+
 { #category : #accessing }
 ErlangEvalError >> messageText [
-	^ messageText ifNil: [messageText := 'Got Erlang error on eval: {1}' format: { erlangError printString }]
+	^ messageText ifNil: [messageText := 'Got Erlang error on eval: {1}' format: { self erlangErrorMessage }]
+]
+
+{ #category : #'as yet unclassified' }
+ErlangEvalError >> notifyToRequestor: requestor [
+	^ self requestor: requestor notify: self erlangErrorMessage at: self errorLocation
+]
+
+{ #category : #'as yet unclassified' }
+ErlangEvalError >> requestor: requestor notify: aString at: location [
+	"Refer to the comment in Object|notify:."
+
+	^ requestor
+		ifNil: [SyntaxErrorNotification
+					inClass: self methodClass 
+					withCode: self methodNode source
+					doitFlag: false
+					errorMessage: aString
+					location: location]
+		ifNotNil: [requestor
+					notify: aString , ' ->'
+					at: location
+					in: requestor text]
 ]

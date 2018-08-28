@@ -1,3 +1,6 @@
+"
+I represent an Erlang exception raised during evaluation.
+"
 Class {
 	#name : #ErlangEvalExceptionError,
 	#superclass : #ErlangEvalError,

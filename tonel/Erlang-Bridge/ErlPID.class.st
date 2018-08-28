@@ -38,6 +38,11 @@ ErlPID >> id: anObject [
 	id := anObject
 ]
 
+{ #category : #testing }
+ErlPID >> isErlPID [
+	^ true
+]
+
 { #category : #accessing }
 ErlPID >> node [
 	^ node

@@ -205,6 +205,18 @@ ErlETFParser >> parse_LIST_EXT [
 ]
 
 { #category : #parsing }
+ErlETFParser >> parse_MAP_EXT [
+	| arity result |
+	arity := self nextUInt32.
+	result := Dictionary new.
+	1 to: arity do: [ :i |
+		result at: self parseTerm put: self parseTerm
+	].
+
+	^ result
+]
+
+{ #category : #parsing }
 ErlETFParser >> parse_NEW_FLOAT_EXT [
 	^ Float fromIEEE64Bit: self nextUInt64
 ]

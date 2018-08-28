@@ -19,3 +19,8 @@ Object >> isEmptyErlCons [
 Object >> isErlCons [
 	^ false
 ]
+
+{ #category : #'*Erlang-Bridge' }
+Object >> isErlPID [
+	^ false
+]
