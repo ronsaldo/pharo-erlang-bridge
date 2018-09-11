@@ -84,6 +84,11 @@ ErlangBridgeClient >> convertEvalResultError: erlangError [
 		yourself
 ]
 
+{ #category : #emake }
+ErlangBridgeClient >> emakeBuildAndLoad [
+	^ self evalValue: 'make:all([load]).'
+]
+
 { #category : #evaluating }
 ErlangBridgeClient >> eval: aString [
 	^ self eval: aString bindings: ErlCons empty
