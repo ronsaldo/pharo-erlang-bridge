@@ -1,0 +1,13 @@
+{application, pharo_erlang_bridge,
+[
+    {description, "Pharo Erlang Bridge"},
+    {vsn, "0.1.0"},
+    {modules, [
+        pharo_erlang_bridge,
+        pharo_erlang_bridge_sup,
+        pharo_erlang_bridge_server
+    ]},
+    {registered, [pharo_erlang_bridge]},
+    {mod, {pharo_erlang_bridge, []}},
+    {applications, [stdlib, kernel, crypto, inets]}
+]}.

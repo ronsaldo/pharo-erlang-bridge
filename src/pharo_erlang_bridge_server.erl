@@ -1,10 +1,12 @@
 -module(pharo_erlang_bridge_server).
 -behavior(gen_server).
 -record(state, {
-    socket
+    socket,
+    smalltalkMessageDispatchProcess
 }).
 -export([
-    start_link/1
+    start_link/1,
+    transcript/2
 ]).
 -define(ListeningPort, 6761).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, code_change/3]).
@@ -12,6 +14,12 @@
 %% Public interface
 start_link(ListenSocket) ->
     gen_server:start_link(?MODULE, [ListenSocket], []).
+
+send_to_smalltalk(Client, Message) ->
+    gen_server:cast(Client, {sendToSmalltalk, Message}).
+
+transcript(Bridge, TranscriptMessage) ->
+    send_to_smalltalk(Bridge, {transcript, TranscriptMessage}).
 
 %% gen_server callbacks
 init([ListenSocket]) ->
@@ -22,6 +30,13 @@ init([ListenSocket]) ->
 handle_call(_Request, _From, State) ->
     {reply, {ok}, State}.
 
+handle_cast(_Request = socketClosed, State) ->
+    {stop, normal, State};
+
+handle_cast(_Request = {sendToSmalltalk, Message}, State) ->
+    sendMessageToClient(State, Message),
+    {noreply, State};
+
 handle_cast(_Request = accept, _S=#state{socket = ListenSocket}) ->
     {ok, Socket} = gen_tcp:accept(ListenSocket),
     pharo_erlang_bridge_sup:start_socket(),
@@ -30,8 +45,9 @@ handle_cast(_Request = accept, _S=#state{socket = ListenSocket}) ->
     case gen_tcp:recv(Socket, 4) of
         {ok, <<"PHRO">>} ->
             % io:format("Got Pharo header~n"),
-            State = #state{socket = Socket},
             BridgeServer = self(),
+            MessageDispatchProcess = spawn_link(fun () -> smalltalkMessageDispatchProcess(BridgeServer) end),
+            State = #state{socket = Socket, smalltalkMessageDispatchProcess = MessageDispatchProcess},
             spawn_link(fun () -> message_receiver_process (BridgeServer, Socket) end),
             {noreply, State};
         _ ->
@@ -56,8 +72,15 @@ handle_network_cast(Request, State) ->
     io:format("Got unknown cast network: ~p~n", [Request]),
     {noreply, State}.
 
-handle_network_call(_Request = {eval, ErlangCode, Bindings}, State) ->
-    Result = evalErlangCode(ErlangCode, Bindings),
+handle_network_call(_Request = {eval, ErlangCode, Bindings}, State = #state{smalltalkMessageDispatchProcess = MessageDispatchProcess}) ->
+    AllBindings = [
+        {'SmalltalkClient', self()},
+        {'PharoClient', self()},
+        {'Smalltalk', MessageDispatchProcess},
+        {'Pharo', MessageDispatchProcess}
+        | Bindings
+    ],
+    Result = evalErlangCode(ErlangCode, orddict:from_list(AllBindings)),
     {reply, Result, State};
 
 handle_network_call(Request, State) ->
@@ -79,7 +102,6 @@ processMessageFromNetwork(State, _Message = {call, Serial, Request}) ->
 processMessageFromNetwork(State, Message) ->
     io:format("Got unknown message from network: ~p~n", [Message]),
     {noreply, State}.
-
 
 %% sendMessageToClient
 sendMessageToClient(State, Message) ->
@@ -105,6 +127,13 @@ message_receiver_process(BridgeServer, Socket) ->
     gen_server:cast(BridgeServer, {message, Message}),
 
     message_receiver_process(BridgeServer, Socket).
+
+%% smalltalkMessageDispatchProcess
+smalltalkMessageDispatchProcess(BridgeServer) ->
+    receive
+        Message -> send_to_smalltalk(BridgeServer, Message)
+    end,
+    smalltalkMessageDispatchProcess(BridgeServer).
 
 %% evalErlangCode
 evalErlangCode(ErlangCode, Bindings) ->
