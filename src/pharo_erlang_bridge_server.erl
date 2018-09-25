@@ -2,6 +2,7 @@
 -behavior(gen_server).
 -record(state, {
     socket,
+    evaluationServer,
     smalltalkMessageDispatchProcess
 }).
 -export([
@@ -17,6 +18,9 @@ start_link(ListenSocket) ->
 
 send_to_smalltalk(Client, Message) ->
     gen_server:cast(Client, {sendToSmalltalk, Message}).
+
+reply_network_call(Client, CallSerial, Response) ->
+    gen_server:cast(Client, {replyNetworkCall, CallSerial, Response}).
 
 transcript(Bridge, TranscriptMessage) ->
     send_to_smalltalk(Bridge, {transcript, TranscriptMessage}).
@@ -47,19 +51,43 @@ handle_cast(_Request = accept, _S=#state{socket = ListenSocket}) ->
             % io:format("Got Pharo header~n"),
             BridgeServer = self(),
             MessageDispatchProcess = spawn_link(fun () -> smalltalkMessageDispatchProcess(BridgeServer) end),
-            State = #state{socket = Socket, smalltalkMessageDispatchProcess = MessageDispatchProcess},
+            EvaluationServer = pharo_erlang_bridge_eval_server:start_link(),
+            State = #state{socket = Socket,
+                evaluationServer = EvaluationServer,
+                smalltalkMessageDispatchProcess = MessageDispatchProcess},
             spawn_link(fun () -> message_receiver_process (BridgeServer, Socket) end),
+
+            % Become the group leader of the evaluation process.
+            group_leader(self(), EvaluationServer),
             {noreply, State};
         _ ->
             io:format("Got invalid Pharo bridge connection~n"),
             {stop, normal, #state{}}
     end;
 
+
+handle_cast(_Request = {socketError, Error}, State) ->
+    case Error of
+        closed -> void;
+        _ -> io:format("Got socket error ~p~n", Error)
+    end,
+    {stop, normal, State};
+
+handle_cast(_Request = {replyNetworkCall, CallSerial, Response}, State) ->
+    sendMessageToClient(State, {callResponse, CallSerial, Response}),
+    {noreply, State};
+
 handle_cast(_Request = {message, Message}, State) ->
     processMessageFromNetwork(State, Message);
 
 handle_cast(_Request, State) ->
     {noreply, State}.
+
+%% io_request
+handle_info(_Message = {io_request, From, ReplyAs, Request}, State) ->
+    Reply = processIORequest(Request, State),
+    From ! {io_reply, ReplyAs, Reply},
+    {noreply, State};
 
 handle_info(_Message, State) ->
     {noreply, State}.
@@ -72,7 +100,8 @@ handle_network_cast(Request, State) ->
     io:format("Got unknown cast network: ~p~n", [Request]),
     {noreply, State}.
 
-handle_network_call(_Request = {eval, ErlangCode, Bindings}, State = #state{smalltalkMessageDispatchProcess = MessageDispatchProcess}) ->
+handle_network_call(_Request = {eval, ErlangCode, Bindings}, From, State) ->
+    #state{evaluationServer = EvaluationServer, smalltalkMessageDispatchProcess = MessageDispatchProcess} = State,
     AllBindings = [
         {'SmalltalkClient', self()},
         {'PharoClient', self()},
@@ -80,10 +109,16 @@ handle_network_call(_Request = {eval, ErlangCode, Bindings}, State = #state{smal
         {'Pharo', MessageDispatchProcess}
         | Bindings
     ],
-    Result = evalErlangCode(ErlangCode, orddict:from_list(AllBindings)),
-    {reply, Result, State};
 
-handle_network_call(Request, State) ->
+    Self = self(),
+    Callback = fun(Result) ->
+        reply_network_call(Self, From, Result)
+    end,
+
+    pharo_erlang_bridge_eval_server:async_eval_erlang_code(EvaluationServer, ErlangCode, orddict:from_list(AllBindings), Callback),
+    {noreply, State};
+
+handle_network_call(Request, _From, State) ->
     io:format("Got unknown call network: ~p~n", [Request]),
     {reply, ignored, State}.
 
@@ -92,7 +127,7 @@ processMessageFromNetwork(State, _Message = {cast, Request}) ->
     handle_network_cast(Request, State);
 
 processMessageFromNetwork(State, _Message = {call, Serial, Request}) ->
-    case handle_network_call(Request, State) of
+    case handle_network_call(Request, Serial, State) of
         {reply, Response, NewState} ->
             sendMessageToClient(NewState, {callResponse, Serial, Response}),
             {noreply, NewState};
@@ -113,20 +148,26 @@ sendMessageToClient(State, Message) ->
 
 %% message_receiver_process
 message_receiver_process(BridgeServer, Socket) ->
-    % Get the next message length.
-    {ok, <<MessageLength:32/big-unsigned-integer>>} = gen_tcp:recv(Socket, 4),
+    case recv_message_from_network(Socket) of
+        {ok, EncodedMessage} ->
+            % Decode the encoded message.
+            Message = erlang:binary_to_term(EncodedMessage),
 
-    % Get the data from the next message.
-    % io:format("Got MessageLength ~p~n", [MessageLength]),
-    {ok, EncodedMessage} = gen_tcp:recv(Socket, MessageLength),
+            % Send the message into the bridge server
+            gen_server:cast(BridgeServer, {message, Message}),
 
-    % Decode the encoded message.
-    Message = erlang:binary_to_term(EncodedMessage),
+            message_receiver_process(BridgeServer, Socket);
+        {error, Error} ->
+            % Tell the bridge server about the closed socket.
+            gen_server:cast(BridgeServer, {socketError, Error})
+    end.
 
-    % Send the message into the bridge server
-    gen_server:cast(BridgeServer, {message, Message}),
-
-    message_receiver_process(BridgeServer, Socket).
+recv_message_from_network(Socket) ->
+    case gen_tcp:recv(Socket, 4) of
+        {ok, <<MessageLength:32/big-unsigned-integer>>} ->
+            gen_tcp:recv(Socket, MessageLength);
+        Error -> Error
+    end.
 
 %% smalltalkMessageDispatchProcess
 smalltalkMessageDispatchProcess(BridgeServer) ->
@@ -135,25 +176,48 @@ smalltalkMessageDispatchProcess(BridgeServer) ->
     end,
     smalltalkMessageDispatchProcess(BridgeServer).
 
-%% evalErlangCode
-evalErlangCode(ErlangCode, Bindings) ->
-    evalErlangCode_scan(ErlangCode, Bindings).
+%% io_request
 
-evalErlangCode_scan(ErlangCode, Bindings) ->
-    case erl_scan:string(ErlangCode) of
-        {ok, Tokens, _} -> evalErlangCode_parse(Tokens, Bindings);
-        {error, ErrorInfo, ErrorLocation} -> {error, scan, ErrorInfo, ErrorLocation}
-    end.
+% Output
+processIORequest(_Request = {put_chars, Encoding, Characters}, State) ->
+    BinaryCharacters = unicode:characters_to_binary(Characters, Encoding, utf8),
+    sendMessageToClient(State, {transcript, BinaryCharacters}),
+    ok;
 
-evalErlangCode_parse(Tokens, Bindings) ->
-    case erl_parse:parse_exprs(Tokens) of
-        {ok, AST} -> evalErlangCode_eval(AST, Bindings);
-        {error, ErrorInfo} -> {error, parse, ErrorInfo}
-    end.
+processIORequest(_Request = {put_chars, Characters}, State) ->
+    processIORequest({put_chars, latin1, Characters}, State);
 
-evalErlangCode_eval(AST, Bindings) ->
-    try erl_eval:exprs(AST, Bindings) of
-        Result -> Result
-    catch
-        error:Error -> {error, exception, Error}
-    end.
+processIORequest(_Request = {put_chars, Encoding, Module, Function, Args}, State) ->
+    Characters = apply(Module, Function, Args),
+    processIORequest({put_chars, Encoding, Characters}, State);
+
+processIORequest(_Request = {put_chars, Module, Function, Args}, State) ->
+    Characters = apply(Module, Function, Args),
+    processIORequest({put_chars, latin1, Characters}, State);
+
+% Multiple requests
+processIORequest(_Request = {requests, Requests}, State) ->
+    processIORequests(Requests, State),
+    ok;
+
+% Input
+processIORequest(_Request = {get_until, _Encoding, _Prompt, _Module, _Function, _ExtraArgs}, _State) ->
+    eof;
+processIORequest(_Request = {get_until, _Prompt, _Module, _Function, _ExtraArgs}, _State) ->
+    eof;
+processIORequest(_Request = {get_chars, _Prompt, _N}, _State) ->
+    eof;
+processIORequest(_Request = {get_line, _Prompt}, _State) ->
+    eof;
+processIORequest(_Request = {get_geometry, __Geometry}, _State) ->
+    {error, enotsup};
+processIORequest(_Request, _State) ->
+    {error, request}.
+
+% Multiple io requests.
+processIORequests(_Requests = [], _State) ->
+    void;
+processIORequests(_Requests = [{io_request, From, ReplyAs, Request} | Rest], State) ->
+    Reply = processIORequest(Request, State),
+    From ! {io_reply, ReplyAs, Reply},
+    processIORequests(Rest, State).

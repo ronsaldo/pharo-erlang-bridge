@@ -7,7 +7,7 @@ start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 init([]) ->
-    {ok, ListenSocket} = gen_tcp:listen(?ListeningPort, [binary, {active,false}]),
+    {ok, ListenSocket} = gen_tcp:listen(?ListeningPort, [binary, {active,false}, {reuseaddr, true}]),
     spawn_link(fun empty_listeners/0),
     MaxRestart = 5,
     MaxTime = 3600,
