@@ -17,6 +17,11 @@ ErlProcess class >> for: aClient named: aProcessName [
 ]
 
 { #category : #evaluating }
+ErlProcess >> erlangDoItBindings [
+	^ {#SelfProcess -> name}
+]
+
+{ #category : #evaluating }
 ErlProcess >> evalValue: anErlangCode [
 	^ client evalValue: anErlangCode bindings: { { #SelfProcess . name } } asErlangList
 ]
@@ -24,6 +29,19 @@ ErlProcess >> evalValue: anErlangCode [
 { #category : #evaluating }
 ErlProcess >> evalValueWithPID: anErlangCode [
 	^ client evalValue: anErlangCode bindings: { { #SelfProcess . self pid } } asErlangList
+]
+
+{ #category : #'as yet unclassified' }
+ErlProcess >> gtInspectorStateIn: composite [
+	<gtInspectorPresentationOrder: -10> 
+	(self respondsTo: #decodedState) ifFalse: [ ^ self ].
+	
+	^ composite fastTable
+		title: 'State';
+		display: [ self decodedState ];
+		column: 'Name' evaluated: [ :assoc | assoc key ];
+		column: 'Value' evaluated: [ :assoc | GTObjectPrinter asTruncatedTextFrom: assoc value ];
+		send: [ :assoc | assoc value ]
 ]
 
 { #category : #accessing }

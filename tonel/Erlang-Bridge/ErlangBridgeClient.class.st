@@ -37,10 +37,12 @@ ErlangBridgeClient >> cast: request [
 
 { #category : #'initialize-release' }
 ErlangBridgeClient >> close [
+	socket ifNil: [ ^ self ].
 	pendingMessagesToSendSemaphore consumeAllSignals.
-	sendingProcess terminate.
-	receptionProcess terminate.
+	sendingProcess ifNotNil: [sendingProcess terminate . sendingProcess := nil].
+	receptionProcess ifNotNil: [receptionProcess terminate . receptionProcess := nil].
 	socket close.
+	socket := nil
 ]
 
 { #category : #'connection open/close' }
@@ -189,11 +191,14 @@ ErlangBridgeClient >> processReceivedMessage: message [
 		self processCallSerial: message second response: message third
 	].
 
+	(message isArray and: [message size = 2 and: [message first == #transcript]]) ifTrue: [ 
+		Transcript show: (message second copyReplaceAll: String lf with: String cr)
+	].
 ]
 
 { #category : #private }
 ErlangBridgeClient >> receptionProcessIteration [
-	| messageSize encodedMessage message messageSizeBuffer |
+	| messageSize encodedMessage message messageSizeBuffer receivedSize newReceivedBytes |
 	"Receive the message size"
 	messageSizeBuffer := ByteArray new: 4.
 	socket receiveDataInto: messageSizeBuffer.
@@ -201,7 +206,11 @@ ErlangBridgeClient >> receptionProcessIteration [
 
 	"Receive the message"
 	encodedMessage := ByteArray new: messageSize.
-	socket receiveDataInto: encodedMessage.
+	receivedSize := 0.
+	[ receivedSize < messageSize ] whileTrue:  [ 
+		newReceivedBytes := socket receiveDataInto: encodedMessage startingAt: 1 + receivedSize.
+		receivedSize := receivedSize + newReceivedBytes
+	].
 
 	message := encodedMessage erlangETFDecoded.
 	self processReceivedMessage: message.
@@ -241,7 +250,8 @@ ErlangBridgeClient >> sendingProcessIteration [
 ErlangBridgeClient >> startReceptionProcess [
 	| session |
 	session := Smalltalk session.
-	sendingProcess := [ 
+	receptionProcess ifNotNil: [ receptionProcess terminate ].
+	receptionProcess := [ 
 		[socket isNotNil and: [session == Smalltalk session]] whileTrue: [
 			self receptionProcessIteration
 		]
@@ -252,7 +262,8 @@ ErlangBridgeClient >> startReceptionProcess [
 ErlangBridgeClient >> startSendingProcess [
 	| session |
 	session := Smalltalk session.
-	sendingProcess := [ 
+	sendingProcess ifNotNil: [ sendingProcess terminate ].
+	sendingProcess := [
 		[socket isNotNil and: [session == Smalltalk session]] whileTrue: [
 			self sendingProcessIteration
 		]

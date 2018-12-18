@@ -143,7 +143,15 @@ ErlETFParser >> parse [
 ErlETFParser >> parseTerm [
 	| tag |
 	tag := in next.
-	^ (TagDispatchTable at: tag + 1) value: self
+	^ (TagDispatchTable at: tag + 1)
+		ifNotNil: [:parser | parser value: self]
+		ifNil: [
+			'etf_dump.bin' asFileReference binaryWriteStreamDo: [:out |
+				out truncate; nextPutAll: in contents
+			].
+		
+			self error: 'Cannot parse ETF with tag value ' , tag printString
+	]
 ]
 
 { #category : #parsing }
@@ -287,6 +295,19 @@ ErlETFParser >> parse_SMALL_ATOM_UTF8_EXT [
 	length := in next.
 	atomData := in next: length.
 	^ atomData utf8Decoded asSymbol
+]
+
+{ #category : #parsing }
+ErlETFParser >> parse_SMALL_BIG_EXT [
+	| n sign result |
+	n := self nextUInt8.
+	sign := self nextUInt8.
+	result := 0.
+	1 to: n do: [ :i |
+		result := (result<<8) + self nextUInt8
+	].
+
+	^ sign = 1 ifTrue: [ result negated ] ifFalse: [ result ]
 ]
 
 { #category : #parsing }

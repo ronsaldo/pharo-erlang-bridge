@@ -70,9 +70,14 @@ GLMRubricErlangTextModel >> erlangBindingList [
 
 { #category : #'do-it' }
 GLMRubricErlangTextModel >> erlangDoIt: aStream requestor: requestor onFail: onFailBlock [
-	| erlangBindings result status |
+	| erlangBindings result status scriptToEval |
 	erlangBindings := self erlangBindingList.
-	result := client eval: aStream contents bindings: erlangBindings.
+	scriptToEval := aStream contents withUnixLineEndings.
+	(scriptToEval trimRight endsWith: '.') ifFalse: [
+		scriptToEval := scriptToEval , '.'
+	]. 
+	
+	result := client eval: scriptToEval bindings: erlangBindings.
 	status := result first.
 	status = #error ifTrue: [
 		self notifyError: result toRequestor: requestor.
