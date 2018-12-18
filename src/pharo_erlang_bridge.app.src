@@ -9,5 +9,8 @@
     ]},
     {registered, [pharo_erlang_bridge]},
     {mod, {pharo_erlang_bridge, []}},
+    {env, [
+        {listeningPort, 6761}
+    ]},
     {applications, [stdlib, kernel, crypto, inets]}
 ]}.

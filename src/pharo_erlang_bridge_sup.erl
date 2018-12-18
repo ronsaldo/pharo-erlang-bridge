@@ -1,13 +1,13 @@
 -module(pharo_erlang_bridge_sup).
 -export([start_link/0, init/1, start_socket/0]).
--define(ListeningPort, 6761).
 -behaviour(supervisor).
 
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 init([]) ->
-    {ok, ListenSocket} = gen_tcp:listen(?ListeningPort, [binary, {active,false}, {reuseaddr, true}]),
+    ListeningPort = application:get_env(pharo_erlang_bridge, listeningPort, 6761),
+    {ok, ListenSocket} = gen_tcp:listen(ListeningPort, [binary, {active,false}, {reuseaddr, true}]),
     spawn_link(fun empty_listeners/0),
     MaxRestart = 5,
     MaxTime = 3600,
