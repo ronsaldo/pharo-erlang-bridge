@@ -33,6 +33,19 @@ ErlCons >> = o [
 ]
 
 { #category : #accessing }
+ErlCons >> asArray [
+	| result destIndex |
+	result := Array new: self size.
+	destIndex := 1.
+	self do: [ :el |
+		result at: destIndex put: el.
+		destIndex := destIndex + 1
+	].
+
+	^ result
+]
+
+{ #category : #accessing }
 ErlCons >> at: index [
 	self ifEmpty: [ self errorSubscriptBounds: index ].
 	index = 1 ifTrue: [ ^ head ].
